@@ -2,17 +2,16 @@ name: Docker - Build and push latest
 
 on:
   push:
-    branches: [ '**' ]
-    tags-ignore: [ 'release-*' ]
+    branches: ['**']
+    tags-ignore: ['release-*']
   pull_request:
-    branches: [ '**' ]
+    branches: ['**']
 
 env:
   REGISTRY: ghcr.io
   # github.repository as <account>/<repo>
   APP_IMAGE: ghcr.io/${{ github.repository }}/${{ github.ref_name }}/app
-  CONTENSIS_CLIENT_ID: 045339ea-3bf9-4c19-9de0-57903e2bdc6d
-  CONTENSIS_SHARED_SECRET: 6e53e57ee515409690c554aa43284961-11ed06d607c84109b7fd900ba447b2f8-4a147f773c7641a38f2108e3ba757f7f
+  APP_IMAGE_LOWERCASE: '' # fixes gh action lint warning
 
 jobs:
   build-builder:
@@ -26,6 +25,10 @@ jobs:
       image-uri: ${{ steps.build.outputs.builder-image-uri }}
 
     steps:
+      - name: set lower case APP_IMAGE
+        run: |
+          echo "APP_IMAGE_LOWERCASE=${APP_IMAGE,,}" >> ${GITHUB_ENV}
+
       - name: Checkout repository
         uses: actions/checkout@v3
 
@@ -41,12 +44,12 @@ jobs:
       - name: Build the Docker image, tag and push to registry
         id: build
         env:
-          BUILDER_IMAGE: ${{ env.APP_IMAGE }}:builder
+          BUILDER_IMAGE: ${{ env.APP_IMAGE_LOWERCASE }}:builder
         run: |
           echo "Pulling images to use for build cache: $BUILDER_IMAGE"
           if [ -n "$(docker pull $BUILDER_IMAGE || echo "")" ]; then echo "Builder image exists: $BUILDER_IMAGE"; fi
           docker build -t $BUILDER_IMAGE --cache-from $BUILDER_IMAGE --build-arg builder_image=$BUILDER_IMAGE --target prepare -f docker/build.Dockerfile .
-          docker push --all-tags ${{ env.APP_IMAGE }}
+          docker push --all-tags ${{ env.APP_IMAGE_LOWERCASE }}
           echo "builder-image-uri=$BUILDER_IMAGE" >> $GITHUB_OUTPUT
 
   build-app:
@@ -62,6 +65,10 @@ jobs:
       image-uri: ${{ steps.build.outputs.image-uri }}
 
     steps:
+      - name: set lower case APP_IMAGE
+        run: |
+          echo "APP_IMAGE_LOWERCASE=${APP_IMAGE,,}" >> ${GITHUB_ENV}
+
       - name: Checkout repository
         uses: actions/checkout@v3
 
@@ -78,15 +85,15 @@ jobs:
         id: build
         env:
           BUILDER_IMAGE: ${{ needs.build-builder.outputs.image-uri }}
-          BUILD_IMAGE: ${{ env.APP_IMAGE }}:build-${{ github.run_number }}
-          LATEST_IMAGE: ${{ env.APP_IMAGE }}:latest
+          BUILD_IMAGE: ${{ env.APP_IMAGE_LOWERCASE }}:build-${{ github.run_number }}
+          LATEST_IMAGE: ${{ env.APP_IMAGE_LOWERCASE }}:latest
         run: |
           echo "Pulling images to use for build cache: $BUILDER_IMAGE $LATEST_IMAGE"
-          echo "{\"commitRef\":\"${{ github.sha }}\",\"pipelineIID\":\"${{ github.run_id }}\",\"pipelineUrl\":\"${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }}\",\"buildNo\":\"${{ github.run_number }}\",\"branchName\":\"${{ github.ref_name }}\",\"registryImage\":\"${{ env.APP_IMAGE }}\"}" > version.json
+          echo "{\"commitRef\":\"${{ github.sha }}\",\"pipelineIID\":\"${{ github.run_id }}\",\"pipelineUrl\":\"${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }}\",\"buildNo\":\"${{ github.run_number }}\",\"branchName\":\"${{ github.ref_name }}\",\"registryImage\":\"${{ env.APP_IMAGE_LOWERCASE }}\"}" > version.json
           if [ -n "$(docker pull $BUILDER_IMAGE || echo "")" ]; then echo "Builder image exists: $BUILDER_IMAGE"; fi
           if [[ -n "$BUILDER_IMAGE_ARG" && -n "$(docker pull $LATEST_IMAGE || echo "")" ]]; then echo "App image exists: $LATEST_IMAGE"; fi
           docker build -t $LATEST_IMAGE -t $BUILD_IMAGE --cache-from $LATEST_IMAGE --build-arg builder_image=$BUILDER_IMAGE -f docker/build.Dockerfile .
-          docker push --all-tags ${{ env.APP_IMAGE }}
+          docker push --all-tags ${{ env.APP_IMAGE_LOWERCASE }}
           echo "image-uri=$BUILD_IMAGE" >> $GITHUB_OUTPUT
   deploy:
     name: Push block to Contensis
